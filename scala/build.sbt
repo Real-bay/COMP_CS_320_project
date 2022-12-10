@@ -10,6 +10,8 @@ libraryDependencies += "org.apache.spark" %% "spark-mllib" % SparkVersion
 libraryDependencies += "org.apache.spark" %% "spark-sql" % SparkVersion
 libraryDependencies += "org.apache.spark" %% "spark-streaming" % SparkVersion
 libraryDependencies += "org.scalatest" %% "scalatest" % ScalaTestVersion % "test"
+libraryDependencies += "org.scalanlp" %% "breeze-viz" % "1.3"
+libraryDependencies += "org.scalanlp" %% "breeze-natives" % "1.3"
 
 // suppress all log messages when setting up the Spark Session
 javaOptions += "-Dlog4j.configurationFile=project/log4j.properties"

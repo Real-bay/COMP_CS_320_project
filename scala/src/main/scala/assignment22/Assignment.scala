@@ -7,7 +7,8 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions.{col, concat, length, udf}
-
+import breeze.linalg.DenseVector
+import breeze.plot._
 
 class Assignment {
 
@@ -68,6 +69,21 @@ class Assignment {
 
   def deNormalize(norm: Double, min: Double, max: Double): Double = {
     norm * (max - min) + min
+  }
+
+  def visualizeSilhouetteScore(scores: Array[(Int, Double)]): Unit = {
+    val fig = Figure()
+    val plt = fig.subplot(0)
+    val k = DenseVector(scores.map(_._1.toDouble))
+    val score = DenseVector(scores.map(_._2))
+
+    plt += plot(k, score)
+    plt.xlabel = "k"
+    plt.ylabel = "Silhouette score"
+    plt.title = "Silhouette score for k"
+
+    fig.refresh()
+    Thread.sleep(5000)
   }
 
 
@@ -175,7 +191,9 @@ class Assignment {
     // normalize featureDF to [0, 1]
     val scaledData = getScaledData(featureDf, Array("features", "LABEL"))
 
-    getSilhouetteScore(scaledData, low, high)
+    val scores = getSilhouetteScore(scaledData, low, high)
+    visualizeSilhouetteScore(scores)
+    scores
   }
 
 }
