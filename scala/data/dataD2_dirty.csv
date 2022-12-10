@@ -1,9 +1,12 @@
 a,b,LABEL
 -0.09814,1.72927,Ok
+error, error, error
 -0.26409,5.96712,Fatal
 -0.2967,5.60437,Fatal
+,error,Unknown
 -0.36332,5.84747,Fatal
 error,1.23e+25,
+null,error,null
 0.90957,1.20152,Ok
 ,,
 -0.35679,5.97237,Fatal
