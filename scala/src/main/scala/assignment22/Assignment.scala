@@ -10,18 +10,21 @@ import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{DoubleType, StringType, StructField, StructType}
 
 
-
 class Assignment {
-
-  // Define schemas for data frames
-  val schemaD2: StructType = StructType(Seq(StructField("a",DoubleType,nullable = true),StructField("b",DoubleType,nullable = true),StructField("LABEL",StringType,nullable = true)))
-  val schemaD3: StructType = StructType(Seq(StructField("a",DoubleType,nullable = true),StructField("b",DoubleType,nullable = true),StructField("c",DoubleType,nullable = true),StructField("LABEL",StringType,nullable = true)))
 
   val spark: SparkSession = SparkSession.builder()
                                         .appName("assignment22")
                                         .config("spark.driver.host", "localhost")
                                         .master("local")
                                         .getOrCreate()
+
+  // Change shuffle partitions
+  spark.conf.set("spark.sql.shuffle.partitions",24)
+
+
+  // Define schemas for data frames
+  val schemaD2: StructType = StructType(Seq(StructField("a",DoubleType,nullable = true),StructField("b",DoubleType,nullable = true),StructField("LABEL",StringType,nullable = true)))
+  val schemaD3: StructType = StructType(Seq(StructField("a",DoubleType,nullable = true),StructField("b",DoubleType,nullable = true),StructField("c",DoubleType,nullable = true),StructField("LABEL",StringType,nullable = true)))
 
   // the data frame to be used in tasks 1 and 4
   val dataD2: DataFrame = spark.read.format("csv")
@@ -82,7 +85,7 @@ class Assignment {
   def task1(df: DataFrame, k: Int): Array[(Double, Double)] = {
 
     // Filter the DataFrame
-    val filteredDf = filterData(df).toDF()
+    val filteredDf = filterData(df)
 
     // get min and max values for a and b in df
     val minA = getMin(filteredDf, "a")
@@ -90,24 +93,23 @@ class Assignment {
     val minB = getMin(filteredDf, "b")
     val maxB = getMax(filteredDf, "b")
 
-    // create new data frame with new column "features"
+    // create new data frame with new column "unscaledFeatures"
     val featureDf = new VectorAssembler()
       .setInputCols(Array("a", "b"))
-      .setOutputCol("features")
+      .setOutputCol("unscaledFeatures")
       .transform(filteredDf)
 
     // normalize featureDF to [0, 1]
     val scaledData = new MinMaxScaler()
-      .setInputCol("features")
-      .setOutputCol("scaledFeatures")
+      .setInputCol("unscaledFeatures")
+      .setOutputCol("features")
       .fit(featureDf)
       .transform(featureDf)
 
-    // create the k-means model,get the centers, de-normalize them and return them
+    // create the k-means model, get the centers, de-normalize them and return them
     new KMeans()
       .setK(k)
       .setSeed(1)
-      .setFeaturesCol("scaledFeatures")
       .fit(scaledData)
       .clusterCenters
       .map(x => (deNormalize(x(0), minA, maxA), deNormalize(x(1), minB, maxB)))
@@ -118,7 +120,6 @@ class Assignment {
 
     // Filter the DataFrame
     val filteredDf = filterData(df)
-    filteredDf.show()
 
     // get min and max values for a, b and c in df
     val minA = getMin(filteredDf, "a")
@@ -128,24 +129,23 @@ class Assignment {
     val minC = getMin(filteredDf, "c")
     val maxC = getMax(filteredDf, "c")
 
-    // create new data frame with new column "features"
+    // create new data frame with new column "unscaledFeatures"
     val featureDf = new VectorAssembler()
       .setInputCols(Array("a", "b", "c"))
-      .setOutputCol("features")
+      .setOutputCol("unscaledFeatures")
       .transform(filteredDf)
 
     // normalize featureDF to [0, 1]
     val scaledData = new MinMaxScaler()
-      .setInputCol("features")
-      .setOutputCol("scaledFeatures")
+      .setInputCol("unscaledFeatures")
+      .setOutputCol("features")
       .fit(featureDf)
       .transform(featureDf)
 
-    // create the k-means model,get the centers, de-normalize them and return them
+    // create the k-means model, get the centers, de-normalize them and return them
     new KMeans()
       .setK(k)
       .setSeed(1)
-      .setFeaturesCol("scaledFeatures")
       .fit(scaledData)
       .clusterCenters
       .map(x => (deNormalize(x(0), minA, maxA), deNormalize(x(1), minB, maxB), deNormalize(x(2), minC, maxC)))
@@ -163,7 +163,7 @@ class Assignment {
     val minB = getMin(filteredDf, "b")
     val maxB = getMax(filteredDf, "b")
 
-    // create new data frame with new column "features"
+    // create new data frame with new column "unscaledFeatures"
     val featureDf = new VectorAssembler()
       .setInputCols(Array("a", "b"))
       .setOutputCol("unscaledFeatures")
@@ -225,7 +225,7 @@ class Assignment {
     // Filter the DataFrame
     val filteredDf = filterData(df)
 
-    // create new data frame with new column "features"
+    // create new data frame with new column "unscaledFeatures"
     val featureDf = new VectorAssembler()
       .setInputCols(Array("a", "b"))
       .setOutputCol("unscaledFeatures")
