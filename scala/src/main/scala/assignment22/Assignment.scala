@@ -13,8 +13,7 @@ import org.apache.spark.sql.types.{DoubleType, StringType, StructField, StructTy
 
 class Assignment {
 
-  // define shcema for dataD2
-
+  // Define schemas for data frames
   val schemaD2: StructType = StructType(Seq(StructField("a",DoubleType,nullable = true),StructField("b",DoubleType,nullable = true),StructField("LABEL",StringType,nullable = true)))
   val schemaD3: StructType = StructType(Seq(StructField("a",DoubleType,nullable = true),StructField("b",DoubleType,nullable = true),StructField("c",DoubleType,nullable = true),StructField("LABEL",StringType,nullable = true)))
 
@@ -55,14 +54,16 @@ class Assignment {
 
   def filterData(df: DataFrame): DataFrame = {
     if (df.schema.fieldNames.contains("c")) {
-      df.filter(col("a").rlike("[+-]?\\d*\\.?\\d+")
-        && col("b").rlike("[+-]?\\d*\\.?\\d+")
-        && col("c").rlike("[+-]?\\d*\\.?\\d+")
-        && col("LABEL").isin("Ok", "Fatal", 0, 1))
+      df.filter(col("a").cast(DoubleType).isNotNull
+        && col("b").cast(DoubleType).isNotNull
+        && col("c").cast(DoubleType).isNotNull
+        && col("LABEL").isin("Ok", "Fatal", 0, 1)
+      )
     } else {
-      df.filter(col("a").rlike("[+-]?\\d*\\.?\\d+")
-      && col("b").rlike("[+-]?\\d*\\.?\\d+")
-      && col("LABEL").isin("Ok", "Fatal", 0, 1))
+      df.filter(col("a").cast(DoubleType).isNotNull
+        && col("b").cast(DoubleType).isNotNull
+        && col("LABEL").isin("Ok", "Fatal", 0, 1)
+      )
     }
   }
 
