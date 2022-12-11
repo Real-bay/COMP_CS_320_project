@@ -272,20 +272,20 @@ class Assignment {
     // Filter the DataFrame
     val filteredDf = filterData(df)
 
-    // create new data frame with new column "unscaledFeatures"
-    val featureDf = new VectorAssembler()
-      .setInputCols(Array("a", "b"))
-      .setOutputCol("unscaledFeatures")
-      .transform(filteredDf)
+    // Add params for the pipeline
+    val params = ParamMap().put(featureCreator.outputCol, "unscaledFeatures")
+                           .put(featureScaler.inputCol, "unscaledFeatures")
+                           .put(featureScaler.outputCol, "features")
+                           .put(modelFitter.featuresCol, "features")
 
-    // normalize featureDF to [0, 1]
-    val scaledData = new MinMaxScaler()
-      .setInputCol("unscaledFeatures")
-      .setOutputCol("features")
-      .fit(featureDf)
-      .transform(featureDf)
+    // Create a separate pipeline without modelFitter
+    val taskPipeline = new Pipeline().setStages(Array(featureCreator, featureScaler))
 
-    val scores = getSilhouetteScore(scaledData, low, high)
+    // Run the pipeline with the params
+    val model = taskPipeline.fit(filteredDf, params)
+    val scaledDf = model.transform(filteredDf)
+
+    val scores = getSilhouetteScore(scaledDf, low, high)
     visualizeSilhouetteScore(scores)
     scores
   }
