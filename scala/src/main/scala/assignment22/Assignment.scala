@@ -4,20 +4,13 @@ import org.apache.spark.ml.clustering.{KMeans, KMeansModel}
 import org.apache.spark.ml.evaluation.ClusteringEvaluator
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.feature.{MinMaxScaler, VectorAssembler}
-import org.apache.spark.ml.{Pipeline, PipelineModel, clustering}
+import org.apache.spark.ml.Pipeline
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.expressions.UserDefinedFunction
-import org.apache.spark.sql.functions.{col, concat, length, udf}
+import org.apache.spark.sql.functions.{col,udf}
 import breeze.plot._
 import breeze.linalg.{DenseVector => BDV}
-import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.mllib.linalg.DenseVector
-import org.apache.spark.sql.Encoders.scalaDouble
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.functions.avg
-import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{DoubleType, StringType, StructField, StructType}
 
 
@@ -28,9 +21,6 @@ class Assignment {
                                         .config("spark.driver.host", "localhost")
                                         .master("local")
                                         .getOrCreate()
-
-  // Change shuffle partitions
-  spark.conf.set("spark.sql.shuffle.partitions",24)
 
 
   // Define schemas for data frames
@@ -89,30 +79,6 @@ class Assignment {
     df.select(colName).agg(Map(colName -> "max")).first.getDouble(0)
   }
 
-  def getFeatureDf(df: DataFrame, featureCols: Array[String]): DataFrame = {
-    new VectorAssembler()
-      .setInputCols(featureCols)
-      .setOutputCol("features")
-      .transform(df)
-  }
-
-  def getScaledData(df: DataFrame, colNames: Array[String]): DataFrame = {
-    new MinMaxScaler()
-    .setInputCol("features")
-    .setOutputCol("scaledFeatures")
-    .fit(df)
-    .transform(df)
-      .drop(colNames: _*)
-      .withColumnRenamed("scaledFeatures", "features")
-  }
-
-  def getModel(df: DataFrame, k: Int): KMeansModel = {
-    new KMeans()
-      .setK(k)
-      .setSeed(1)
-      .fit(df)
-  }
-
   def deNormalize(norm: Double, min: Double, max: Double): Double = {
     norm * (max - min) + min
   }
@@ -135,16 +101,16 @@ class Assignment {
    // ML-pipeline
   val featureCreator: VectorAssembler = new VectorAssembler()
     .setInputCols(Array("a", "b"))
-    .setOutputCol("features")
+    .setOutputCol("unscaledFeatures")
 
   val featureScaler: MinMaxScaler = new MinMaxScaler()
-    .setInputCol("features")
-    .setOutputCol("scaledFeatures")
+    .setInputCol("unscaledFeatures")
+    .setOutputCol("features")
 
   val modelFitter: KMeans = new KMeans()
     .setK(2)
     .setSeed(1)
-    .setFeaturesCol("scaledFeatures")
+    .setFeaturesCol("features")
 
   val pipeline: Pipeline = new Pipeline().setStages(Array(featureCreator, featureScaler, modelFitter))
 
@@ -153,7 +119,7 @@ class Assignment {
 
     // Filter the DataFrame
     val filteredDf = filterData(df)
-
+    val partitions = filteredDf.rdd.getNumPartitions
 
     // get min and max values for a and b in df
     val minA = getMin(filteredDf, "a")
@@ -161,14 +127,11 @@ class Assignment {
     val minB = getMin(filteredDf, "b")
     val maxB = getMax(filteredDf, "b")
 
-
     // Add params for the pipeline
-    val params = ParamMap().put(modelFitter.k, k).put(modelFitter.featuresCol, "scaledFeatures")
+    val params = ParamMap().put(modelFitter.k, k)
 
     // Run the pipeline
     val model = pipeline.fit(filteredDf, params)
-    val scaledDf = model.transform(filteredDf)
-
 
     // create the k-means model,get the centers, de-normalize them and return them
     model.stages(2).asInstanceOf[KMeansModel]
@@ -192,11 +155,7 @@ class Assignment {
 
     // Add params for the pipeline
     val params = ParamMap().put(featureCreator.inputCols, Array("a", "b", "c"))
-                           .put(featureCreator.outputCol, "unscaledFeatures")
-                           .put(featureScaler.inputCol, "unscaledFeatures")
-                           .put(featureScaler.outputCol, "features")
                            .put(modelFitter.k, k)
-                           .put(modelFitter.featuresCol, "features")
 
     // Run the pipeline
     val model = pipeline.fit(filteredDf, params)
@@ -220,11 +179,7 @@ class Assignment {
     val maxB = getMax(filteredDf, "b")
 
     // Add params for the pipeline
-    val params = ParamMap().put(featureCreator.outputCol, "unscaledFeatures")
-                           .put(featureScaler.inputCol, "unscaledFeatures")
-                           .put(featureScaler.outputCol, "features")
-                           .put(modelFitter.k, k)
-                           .put(modelFitter.featuresCol, "features")
+    val params = ParamMap().put(modelFitter.k, k)
 
     // Run the pipeline with the params
     val model = pipeline.fit(filteredDf,params)
@@ -272,17 +227,11 @@ class Assignment {
     // Filter the DataFrame
     val filteredDf = filterData(df)
 
-    // Add params for the pipeline
-    val params = ParamMap().put(featureCreator.outputCol, "unscaledFeatures")
-                           .put(featureScaler.inputCol, "unscaledFeatures")
-                           .put(featureScaler.outputCol, "features")
-                           .put(modelFitter.featuresCol, "features")
-
     // Create a separate pipeline without modelFitter
     val taskPipeline = new Pipeline().setStages(Array(featureCreator, featureScaler))
 
     // Run the pipeline with the params
-    val model = taskPipeline.fit(filteredDf, params)
+    val model = taskPipeline.fit(filteredDf)
     val scaledDf = model.transform(filteredDf)
 
     val scores = getSilhouetteScore(scaledDf, low, high)
