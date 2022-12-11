@@ -4,8 +4,7 @@ import org.apache.spark.ml.clustering.{KMeans, KMeansModel}
 import org.apache.spark.ml.evaluation.ClusteringEvaluator
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.feature.{MinMaxScaler, VectorAssembler}
-import org.apache.spark.ml.Pipeline
-import org.apache.spark.ml.PipelineModel
+import org.apache.spark.ml.{Pipeline, PipelineModel, clustering}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.expressions.UserDefinedFunction
@@ -147,7 +146,7 @@ class Assignment {
     .setSeed(1)
     .setFeaturesCol("scaledFeatures")
 
-  val pipeline: Pipeline = new Pipeline().setStages(Array(featureCreator, featureScaler))
+  val pipeline: Pipeline = new Pipeline().setStages(Array(featureCreator, featureScaler, modelFitter))
 
 
   def task1(df: DataFrame, k: Int): Array[(Double, Double)] = {
@@ -163,8 +162,8 @@ class Assignment {
     val maxB = getMax(filteredDf, "b")
 
 
-    // Add parameters that differ from defaults
-    val params = ParamMap().put(modelFitter.k, k).put(modelFitter.featuresCol, "features")
+    // Add params for the pipeline
+    val params = ParamMap().put(modelFitter.k, k).put(modelFitter.featuresCol, "scaledFeatures")
 
     // Run the pipeline
     val model = pipeline.fit(filteredDf, params)
@@ -172,11 +171,7 @@ class Assignment {
 
 
     // create the k-means model,get the centers, de-normalize them and return them
-    new KMeans()
-      .setK(k)
-      .setSeed(1)
-      .setFeaturesCol("scaledFeatures")
-      .fit(scaledDf)
+    model.stages(2).asInstanceOf[KMeansModel]
       .clusterCenters
       .map(x => (deNormalize(x(0), minA, maxA), deNormalize(x(1), minB, maxB)))
 
@@ -195,22 +190,20 @@ class Assignment {
     val minC = getMin(filteredDf, "c")
     val maxC = getMax(filteredDf, "c")
 
-    // Add input columns for featureCreator to parammap
+    // Add params for the pipeline
     val params = ParamMap().put(featureCreator.inputCols, Array("a", "b", "c"))
                            .put(featureCreator.outputCol, "unscaledFeatures")
                            .put(featureScaler.inputCol, "unscaledFeatures")
                            .put(featureScaler.outputCol, "features")
+                           .put(modelFitter.k, k)
+                           .put(modelFitter.featuresCol, "features")
 
     // Run the pipeline
     val model = pipeline.fit(filteredDf, params)
     val scaledDf = model.transform(filteredDf)
 
-    // create the k-means model, get the centers, de-normalize them and return them
-    new KMeans()
-      .setK(k)
-      .setSeed(1)
-      .fit(scaledDf)
-      .clusterCenters
+    // Get the centers, de-normalize them and return them
+    model.stages(2).asInstanceOf[KMeansModel].clusterCenters
       .map(x => (deNormalize(x(0), minA, maxA), deNormalize(x(1), minB, maxB), deNormalize(x(2), minC, maxC)))
   }
 
@@ -226,20 +219,18 @@ class Assignment {
     val minB = getMin(filteredDf, "b")
     val maxB = getMax(filteredDf, "b")
 
-    // Add input columns for featureCreator to parammap
+    // Add params for the pipeline
     val params = ParamMap().put(featureCreator.outputCol, "unscaledFeatures")
                            .put(featureScaler.inputCol, "unscaledFeatures")
                            .put(featureScaler.outputCol, "features")
+                           .put(modelFitter.k, k)
+                           .put(modelFitter.featuresCol, "features")
 
-    val KMeans = new KMeans()
-      .setK(k)
-      .setSeed(1)
+    // Run the pipeline with the params
+    val model = pipeline.fit(filteredDf,params)
 
-    val newPipeline = new Pipeline().setStages(Array(featureCreator, featureScaler, KMeans))
 
-    // Run the pipeline
-    val model = newPipeline.fit(filteredDf,params)
-
+    // Make predictions and select two clusters with the highest number of fatal cases
     val fatalClusters = model.transform(filteredDf)
       .filter(col("LABEL") === 0)
       .groupBy("prediction")
