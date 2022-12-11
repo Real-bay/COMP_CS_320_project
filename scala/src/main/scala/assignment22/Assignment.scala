@@ -226,28 +226,21 @@ class Assignment {
     val minB = getMin(filteredDf, "b")
     val maxB = getMax(filteredDf, "b")
 
-    // create new data frame with new column "unscaledFeatures"
-    val featureDf = new VectorAssembler()
-      .setInputCols(Array("a", "b"))
-      .setOutputCol("unscaledFeatures")
-      .transform(filteredDf)
+    // Add input columns for featureCreator to parammap
+    val params = ParamMap().put(featureCreator.outputCol, "unscaledFeatures")
+                           .put(featureScaler.inputCol, "unscaledFeatures")
+                           .put(featureScaler.outputCol, "features")
 
-    // normalize featureDF to [0, 1]
-    val scaledData = new MinMaxScaler()
-      .setInputCol("unscaledFeatures")
-      .setOutputCol("features")
-      .fit(featureDf)
-      .transform(featureDf)
-
-    // create the k-means model
-    val model = new KMeans()
+    val KMeans = new KMeans()
       .setK(k)
       .setSeed(1)
-      .fit(scaledData)
 
-    // Make predictions and select two clusters with the highest number of fatal cases
-    val fatalClusters = model
-      .transform(scaledData)
+    val newPipeline = new Pipeline().setStages(Array(featureCreator, featureScaler, KMeans))
+
+    // Run the pipeline
+    val model = newPipeline.fit(filteredDf,params)
+
+    val fatalClusters = model.transform(filteredDf)
       .filter(col("LABEL") === 0)
       .groupBy("prediction")
       .count()
@@ -256,7 +249,7 @@ class Assignment {
       .map(x => x(0).asInstanceOf[Int])
 
     // de-normalize the centers and return the correct ones
-    Array(model.clusterCenters(fatalClusters(0)), model.clusterCenters(fatalClusters(1)))
+    Array(model.stages(2).asInstanceOf[KMeansModel].clusterCenters(fatalClusters(0)), model.stages(2).asInstanceOf[KMeansModel].clusterCenters(fatalClusters(1)))
       .map(x => (deNormalize(x(0), minA, maxA), deNormalize(x(1), minB, maxB)))
   }
 
