@@ -18,6 +18,9 @@ import org.apache.spark.sql.Encoders.scalaDouble
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.functions.avg
+import org.apache.spark.sql.functions.{col, udf}
+import org.apache.spark.sql.types.{DoubleType, StringType, StructField, StructType}
+
 
 class Assignment {
 
@@ -27,22 +30,57 @@ class Assignment {
                                         .master("local")
                                         .getOrCreate()
 
+  // Change shuffle partitions
+  spark.conf.set("spark.sql.shuffle.partitions",24)
+
+
+  // Define schemas for data frames
+  val schemaD2: StructType = StructType(Seq(StructField("a",DoubleType,nullable = true),StructField("b",DoubleType,nullable = true),StructField("LABEL",StringType,nullable = true)))
+  val schemaD3: StructType = StructType(Seq(StructField("a",DoubleType,nullable = true),StructField("b",DoubleType,nullable = true),StructField("c",DoubleType,nullable = true),StructField("LABEL",StringType,nullable = true)))
+
   // the data frame to be used in tasks 1 and 4
   val dataD2: DataFrame = spark.read.format("csv")
                                     .option("header", "true")
-                                    .option("inferSchema", "true")
+                                    .schema(schemaD2)
                                     .load("data/dataD2.csv")
+
+  // cache the data frame because it will be used multiple times
+  dataD2.cache()
+
 
   // the data frame to be used in task 2
   val dataD3: DataFrame = spark.read.format("csv")
                                     .option("header", "true")
-                                    .option("inferSchema", "true")
+                                    .schema(schemaD3)
                                     .load("data/dataD3.csv")
+  dataD3.cache()
 
   // the data frame to be used in task 3 (based on dataD2 but containing numeric labels)
   val labelToInteger: UserDefinedFunction = udf((label: String) => if (label == "Fatal") 0 else 1)
   val dataD2WithLabels: DataFrame = dataD2.withColumn("LABEL", labelToInteger(dataD2("LABEL")))
+  dataD2WithLabels.cache()
 
+  // Dirty dataFrame
+  val dataD2Dirty: DataFrame = spark.read.format("csv")
+                                    .option("header", "true")
+                                    .schema(schemaD2)
+                                    .load("data/dataD2_dirty.csv")
+
+
+  def filterData(df: DataFrame): DataFrame = {
+    if (df.schema.fieldNames.contains("c")) {
+      df.filter(col("a").cast(DoubleType).isNotNull
+        && col("b").cast(DoubleType).isNotNull
+        && col("c").cast(DoubleType).isNotNull
+        && col("LABEL").isin("Ok", "Fatal", 0, 1)
+      )
+    } else {
+      df.filter(col("a").cast(DoubleType).isNotNull
+        && col("b").cast(DoubleType).isNotNull
+        && col("LABEL").isin("Ok", "Fatal", 0, 1)
+      )
+    }
+  }
 
   def getMin(df: DataFrame, colName: String): Double = {
     df.select(colName).agg(Map(colName -> "min")).first.getDouble(0)
@@ -112,27 +150,25 @@ class Assignment {
   val pipeline: Pipeline = new Pipeline().setStages(Array(featureCreator, featureScaler))
 
 
-  def runPipeline(df: DataFrame, params: ParamMap): DataFrame = {
-    // Create a pipeline model and modify the parameters
-    val model = pipeline.fit(df, params)
-
-    // Predict the labels of the input dataframe
-    model.transform(df).select("prediction")
-  }
-
   def task1(df: DataFrame, k: Int): Array[(Double, Double)] = {
+
+    // Filter the DataFrame
+    val filteredDf = filterData(df)
+
+
     // get min and max values for a and b in df
-    val minA = getMin(df, "a")
-    val maxA = getMax(df, "a")
-    val minB = getMin(df, "b")
-    val maxB = getMax(df, "b")
+    val minA = getMin(filteredDf, "a")
+    val maxA = getMax(filteredDf, "a")
+    val minB = getMin(filteredDf, "b")
+    val maxB = getMax(filteredDf, "b")
+
 
     // Add parameters that differ from defaults
     val params = ParamMap().put(modelFitter.k, k).put(modelFitter.featuresCol, "features")
 
     // Run the pipeline
-    val model = pipeline.fit(df, params)
-    val scaledDf = model.transform(df)
+    val model = pipeline.fit(filteredDf, params)
+    val scaledDf = model.transform(filteredDf)
     scaledDf.show()
 
     // create the k-means model,get the centers, de-normalize them and return them
@@ -148,22 +184,35 @@ class Assignment {
 
   def task2(df: DataFrame, k: Int): Array[(Double, Double, Double)] = {
 
-    // get min and max values for a, b and c in df
-    val minA = getMin(df, "a")
-    val maxA = getMax(df, "a")
-    val minB = getMin(df, "b")
-    val maxB = getMax(df, "b")
-    val minC = getMin(df, "c")
-    val maxC = getMax(df, "c")
+    // Filter the DataFrame
+    val filteredDf = filterData(df)
 
-    // create new data frame with new column "features"
-    val featureDf = getFeatureDf(df, Array("a", "b", "c"))
+    // get min and max values for a, b and c in df
+    val minA = getMin(filteredDf, "a")
+    val maxA = getMax(filteredDf, "a")
+    val minB = getMin(filteredDf, "b")
+    val maxB = getMax(filteredDf, "b")
+    val minC = getMin(filteredDf, "c")
+    val maxC = getMax(filteredDf, "c")
+
+    // create new data frame with new column "unscaledFeatures"
+    val featureDf = new VectorAssembler()
+      .setInputCols(Array("a", "b", "c"))
+      .setOutputCol("unscaledFeatures")
+      .transform(filteredDf)
 
     // normalize featureDF to [0, 1]
-    val scaledData = getScaledData(featureDf, Array("features", "LABEL"))
+    val scaledData = new MinMaxScaler()
+      .setInputCol("unscaledFeatures")
+      .setOutputCol("features")
+      .fit(featureDf)
+      .transform(featureDf)
 
-    // create the k-means model,get the centers, de-normalize them and return them
-    getModel(scaledData, k)
+    // create the k-means model, get the centers, de-normalize them and return them
+    new KMeans()
+      .setK(k)
+      .setSeed(1)
+      .fit(scaledData)
       .clusterCenters
       .map(x => (deNormalize(x(0), minA, maxA), deNormalize(x(1), minB, maxB), deNormalize(x(2), minC, maxC)))
   }
@@ -171,20 +220,33 @@ class Assignment {
 
   def task3(df: DataFrame, k: Int): Array[(Double, Double)] = {
 
-    // get min and max values for a and b in df
-    val minA = getMin(df, "a")
-    val maxA = getMax(df, "a")
-    val minB = getMin(df, "b")
-    val maxB = getMax(df, "b")
+    // Filter the DataFrame
+    val filteredDf = filterData(df)
 
-    // create new data frame with new column "features"
-    val featureDf = getFeatureDf(df, Array("a", "b"))
+    // get min and max values for a and b in df
+    val minA = getMin(filteredDf, "a")
+    val maxA = getMax(filteredDf, "a")
+    val minB = getMin(filteredDf, "b")
+    val maxB = getMax(filteredDf, "b")
+
+    // create new data frame with new column "unscaledFeatures"
+    val featureDf = new VectorAssembler()
+      .setInputCols(Array("a", "b"))
+      .setOutputCol("unscaledFeatures")
+      .transform(filteredDf)
 
     // normalize featureDF to [0, 1]
-    val scaledData = getScaledData(featureDf, Array("features"))
+    val scaledData = new MinMaxScaler()
+      .setInputCol("unscaledFeatures")
+      .setOutputCol("features")
+      .fit(featureDf)
+      .transform(featureDf)
 
     // create the k-means model
-    val model = getModel(scaledData, k)
+    val model = new KMeans()
+      .setK(k)
+      .setSeed(1)
+      .fit(scaledData)
 
     // Make predictions and select two clusters with the highest number of fatal cases
     val fatalClusters = model
@@ -209,7 +271,10 @@ class Assignment {
     }
 
     // create the k-means model and make predictions
-    val predictions = getModel(df, k)
+    val predictions = new KMeans()
+      .setK(k)
+      .setSeed(1)
+      .fit(df)
       .transform(df)
 
     // Evaluate clustering by computing Silhouette score
@@ -223,11 +288,21 @@ class Assignment {
   // Parameter low is the lowest k and high is the highest one.
   def task4(df: DataFrame, low: Int, high: Int): Array[(Int, Double)]  = {
 
-    // create new data frame with new column "features"
-    val featureDf = getFeatureDf(df, Array("a", "b"))
+    // Filter the DataFrame
+    val filteredDf = filterData(df)
+
+    // create new data frame with new column "unscaledFeatures"
+    val featureDf = new VectorAssembler()
+      .setInputCols(Array("a", "b"))
+      .setOutputCol("unscaledFeatures")
+      .transform(filteredDf)
 
     // normalize featureDF to [0, 1]
-    val scaledData = getScaledData(featureDf, Array("features", "LABEL"))
+    val scaledData = new MinMaxScaler()
+      .setInputCol("unscaledFeatures")
+      .setOutputCol("features")
+      .fit(featureDf)
+      .transform(featureDf)
 
     val scores = getSilhouetteScore(scaledData, low, high)
     visualizeSilhouetteScore(scores)

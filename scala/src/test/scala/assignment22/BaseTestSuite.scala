@@ -53,4 +53,17 @@ class BaseTestSuite extends DIPTestSuite {
       case error: Throwable => fail(error.getMessage)
     }
   }
+
+  // Test with erroneous data
+  test("Simple test for task 1 with dirty data") {
+    val k: Int = 5
+
+    try {
+      val centers = getAssignment.task1(getAssignment.dataD2Dirty, k)
+      assert(centers.length === k, getArraySizeErrorMessage(k))
+    }
+    catch {
+      case error: Throwable => fail(error.getMessage)
+    }
+  }
 }
