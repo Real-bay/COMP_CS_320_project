@@ -86,22 +86,6 @@ class Assignment {
     norm * (max - min) + min
   }
 
-  // Visualization function the silhouette score from task4, made using breeze-viz
-  def visualizeSilhouetteScore(scores: Array[(Int, Double)]): Unit = {
-    val fig = Figure()
-    val plt = fig.subplot(0)
-    val k = BDV(scores.map(_._1.toDouble))
-    val score = BDV(scores.map(_._2))
-
-    plt += plot(k, score)
-    plt.xlabel = "k"
-    plt.ylabel = "Silhouette score"
-    plt.title = "Silhouette score for k"
-
-    fig.refresh()
-    Thread.sleep(5000)
-  }
-
    // ML-pipeline for tasks 1-3
   val featureCreator: VectorAssembler = new VectorAssembler()
     .setInputCols(Array("a", "b"))
@@ -142,6 +126,7 @@ class Assignment {
       .map(x => (deNormalize(x(0), minA, maxA), deNormalize(x(1), minB, maxB)))
 
   }
+
 
   def task2(df: DataFrame, k: Int): Array[(Double, Double, Double)] = {
 
@@ -201,6 +186,22 @@ class Assignment {
   }
 
 
+  // Visualization function the silhouette score from task4, made using breeze-viz
+  def visualizeSilhouetteScore(scores: Array[(Int, Double)]): Unit = {
+    val fig = Figure()
+    val plt = fig.subplot(0)
+    val k = BDV(scores.map(_._1.toDouble))
+    val score = BDV(scores.map(_._2))
+
+    plt += plot(k, score)
+    plt.xlabel = "k"
+    plt.ylabel = "Silhouette score"
+    plt.title = "Silhouette score for k"
+
+    fig.refresh()
+    Thread.sleep(5000)
+  }
+
   // Recursive function for calculating the silhouette score for each k up to max
   def getSilhouetteScore(df: DataFrame, k: Int, max: Int): Array[(Int, Double)] = {
 
@@ -221,7 +222,6 @@ class Assignment {
     // add score to scores array
     Array.concat(Array((k, score)), getSilhouetteScore(df, k + 1, max))
   }
-
 
   // Parameter low is the lowest k and high is the highest one.
   def task4(df: DataFrame, low: Int, high: Int): Array[(Int, Double)]  = {
