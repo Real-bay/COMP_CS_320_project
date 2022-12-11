@@ -169,7 +169,7 @@ class Assignment {
     // Run the pipeline
     val model = pipeline.fit(filteredDf, params)
     val scaledDf = model.transform(filteredDf)
-    scaledDf.show()
+
 
     // create the k-means model,get the centers, de-normalize them and return them
     new KMeans()
@@ -195,24 +195,21 @@ class Assignment {
     val minC = getMin(filteredDf, "c")
     val maxC = getMax(filteredDf, "c")
 
-    // create new data frame with new column "unscaledFeatures"
-    val featureDf = new VectorAssembler()
-      .setInputCols(Array("a", "b", "c"))
-      .setOutputCol("unscaledFeatures")
-      .transform(filteredDf)
+    // Add input columns for featureCreator to parammap
+    val params = ParamMap().put(featureCreator.inputCols, Array("a", "b", "c"))
+                           .put(featureCreator.outputCol, "unscaledFeatures")
+                           .put(featureScaler.inputCol, "unscaledFeatures")
+                           .put(featureScaler.outputCol, "features")
 
-    // normalize featureDF to [0, 1]
-    val scaledData = new MinMaxScaler()
-      .setInputCol("unscaledFeatures")
-      .setOutputCol("features")
-      .fit(featureDf)
-      .transform(featureDf)
+    // Run the pipeline
+    val model = pipeline.fit(filteredDf, params)
+    val scaledDf = model.transform(filteredDf)
 
     // create the k-means model, get the centers, de-normalize them and return them
     new KMeans()
       .setK(k)
       .setSeed(1)
-      .fit(scaledData)
+      .fit(scaledDf)
       .clusterCenters
       .map(x => (deNormalize(x(0), minA, maxA), deNormalize(x(1), minB, maxB), deNormalize(x(2), minC, maxC)))
   }
