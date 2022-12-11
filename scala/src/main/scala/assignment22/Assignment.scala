@@ -2,13 +2,22 @@ package assignment22
 
 import org.apache.spark.ml.clustering.{KMeans, KMeansModel}
 import org.apache.spark.ml.evaluation.ClusteringEvaluator
+import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.feature.{MinMaxScaler, VectorAssembler}
+import org.apache.spark.ml.Pipeline
+import org.apache.spark.ml.PipelineModel
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions.{col, concat, length, udf}
-import breeze.linalg.DenseVector
 import breeze.plot._
+import breeze.linalg.{DenseVector => BDV}
+import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.mllib.linalg.DenseVector
+import org.apache.spark.sql.Encoders.scalaDouble
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.functions.avg
 
 class Assignment {
 
@@ -74,8 +83,8 @@ class Assignment {
   def visualizeSilhouetteScore(scores: Array[(Int, Double)]): Unit = {
     val fig = Figure()
     val plt = fig.subplot(0)
-    val k = DenseVector(scores.map(_._1.toDouble))
-    val score = DenseVector(scores.map(_._2))
+    val k = BDV(scores.map(_._1.toDouble))
+    val score = BDV(scores.map(_._2))
 
     plt += plot(k, score)
     plt.xlabel = "k"
@@ -86,27 +95,56 @@ class Assignment {
     Thread.sleep(5000)
   }
 
+   // ML-pipeline
+  val featureCreator: VectorAssembler = new VectorAssembler()
+    .setInputCols(Array("a", "b"))
+    .setOutputCol("features")
+
+  val featureScaler: MinMaxScaler = new MinMaxScaler()
+    .setInputCol("features")
+    .setOutputCol("scaledFeatures")
+
+  val modelFitter: KMeans = new KMeans()
+    .setK(2)
+    .setSeed(1)
+    .setFeaturesCol("scaledFeatures")
+
+  val pipeline: Pipeline = new Pipeline().setStages(Array(featureCreator, featureScaler))
+
+
+  def runPipeline(df: DataFrame, params: ParamMap): DataFrame = {
+    // Create a pipeline model and modify the parameters
+    val model = pipeline.fit(df, params)
+
+    // Predict the labels of the input dataframe
+    model.transform(df).select("prediction")
+  }
 
   def task1(df: DataFrame, k: Int): Array[(Double, Double)] = {
-
     // get min and max values for a and b in df
     val minA = getMin(df, "a")
     val maxA = getMax(df, "a")
     val minB = getMin(df, "b")
     val maxB = getMax(df, "b")
 
-    // create new data frame with new column "features"
-    val featureDf = getFeatureDf(df, Array("a", "b"))
+    // Add parameters that differ from defaults
+    val params = ParamMap().put(modelFitter.k, k).put(modelFitter.featuresCol, "features")
 
-    // normalize featureDF to [0, 1]
-    val scaledData = getScaledData(featureDf, Array("features", "LABEL"))
+    // Run the pipeline
+    val model = pipeline.fit(df, params)
+    val scaledDf = model.transform(df)
+    scaledDf.show()
 
     // create the k-means model,get the centers, de-normalize them and return them
-    getModel(scaledData, k)
+    new KMeans()
+      .setK(k)
+      .setSeed(1)
+      .setFeaturesCol("scaledFeatures")
+      .fit(scaledDf)
       .clusterCenters
       .map(x => (deNormalize(x(0), minA, maxA), deNormalize(x(1), minB, maxB)))
-  }
 
+  }
 
   def task2(df: DataFrame, k: Int): Array[(Double, Double, Double)] = {
 
