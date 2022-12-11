@@ -1,6 +1,11 @@
 # Data-Intensive Programming - Assignment
 
-This repository contains the template code for the assignment in the course COMP.CS.320 - Data-Intensive Programming, 2022 Fall implementation.
+Kasperi Kouri
+Matias Aitolahti
 
-- Scala template can be found at [scala](scala)
-- Python template can be found at [python](python)
+This repository contains our solution code for the assignment in the course COMP.CS.320 - Data-Intensive Programming, 2022 Fall implementation.
+
+We chose to do the project in Scala, as we had both been using that for the exercises during the course (and the bonus point was nice, too).
+We did also want to implement all of the additional tasks on top of the basic tasks, which we did.
+
+The most notable additions on top of the implementations in Assignment.scala are the new ninth test we added to test dirty data, and the addition of breeze-viz and breeze-natives (both version 1.3 for compatibility) modules for the visualization.

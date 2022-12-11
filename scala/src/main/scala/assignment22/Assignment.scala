@@ -13,7 +13,10 @@ import breeze.plot._
 import breeze.linalg.{DenseVector => BDV}
 import org.apache.spark.sql.types.{DoubleType, StringType, StructField, StructType}
 
-
+/**
+ * Solutions for the Assignment project
+ * Made by Matias Aitolahti and Kasperi Kouri
+ */
 class Assignment {
 
   val spark: SparkSession = SparkSession.builder()
@@ -83,6 +86,7 @@ class Assignment {
     norm * (max - min) + min
   }
 
+  // Visualization function the silhouette score from task4, made using breeze-viz
   def visualizeSilhouetteScore(scores: Array[(Int, Double)]): Unit = {
     val fig = Figure()
     val plt = fig.subplot(0)
@@ -98,7 +102,7 @@ class Assignment {
     Thread.sleep(5000)
   }
 
-   // ML-pipeline
+   // ML-pipeline for tasks 1-3
   val featureCreator: VectorAssembler = new VectorAssembler()
     .setInputCols(Array("a", "b"))
     .setOutputCol("unscaledFeatures")
@@ -119,7 +123,6 @@ class Assignment {
 
     // Filter the DataFrame
     val filteredDf = filterData(df)
-    val partitions = filteredDf.rdd.getNumPartitions
 
     // get min and max values for a and b in df
     val minA = getMin(filteredDf, "a")
@@ -133,7 +136,7 @@ class Assignment {
     // Run the pipeline
     val model = pipeline.fit(filteredDf, params)
 
-    // create the k-means model,get the centers, de-normalize them and return them
+    // Get the cluster centers, de-normalize them and return them
     model.stages(2).asInstanceOf[KMeansModel]
       .clusterCenters
       .map(x => (deNormalize(x(0), minA, maxA), deNormalize(x(1), minB, maxB)))
@@ -159,9 +162,8 @@ class Assignment {
 
     // Run the pipeline
     val model = pipeline.fit(filteredDf, params)
-    val scaledDf = model.transform(filteredDf)
 
-    // Get the centers, de-normalize them and return them
+    // Get the cluster centers, de-normalize them and return them
     model.stages(2).asInstanceOf[KMeansModel].clusterCenters
       .map(x => (deNormalize(x(0), minA, maxA), deNormalize(x(1), minB, maxB), deNormalize(x(2), minC, maxC)))
   }
@@ -184,7 +186,6 @@ class Assignment {
     // Run the pipeline with the params
     val model = pipeline.fit(filteredDf,params)
 
-
     // Make predictions and select two clusters with the highest number of fatal cases
     val fatalClusters = model.transform(filteredDf)
       .filter(col("LABEL") === 0)
@@ -194,12 +195,13 @@ class Assignment {
       .take(2)
       .map(x => x(0).asInstanceOf[Int])
 
-    // de-normalize the centers and return the correct ones
+    // de-normalize the cluster centers and return the correct ones
     Array(model.stages(2).asInstanceOf[KMeansModel].clusterCenters(fatalClusters(0)), model.stages(2).asInstanceOf[KMeansModel].clusterCenters(fatalClusters(1)))
       .map(x => (deNormalize(x(0), minA, maxA), deNormalize(x(1), minB, maxB)))
   }
 
 
+  // Recursive function for calculating the silhouette score for each k up to max
   def getSilhouetteScore(df: DataFrame, k: Int, max: Int): Array[(Int, Double)] = {
 
     if (k > max) {
