@@ -1,6 +1,12 @@
 # Data-Intensive Programming - Assignment
 
-Kasperi Kouri
+
+//
+The project assignment and a template was provided by the course staff. The implementation is our own work. We ended up getting 55/60 points for this assignment.
+//
+
+
+Kasperi Kouri / 
 Matias Aitolahti
 
 This repository contains our solution code for the assignment in the course COMP.CS.320 - Data-Intensive Programming, 2022 Fall implementation.
